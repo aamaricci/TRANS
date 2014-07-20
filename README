@@ -1,0 +1,18 @@
+**************** TRANS ******************
+**      transform data files            **
+** Copyright        Kristjan Haule      **
+** Version 2.1            22.9.2011     **
+** modified version by Adriano Amaricci **
+******************************************
+
+Usage:
+
+[... |] /Users/amaricci/.scripts/trans f1(#1, #2, ...), [f2(#1, #2, ...)] [file1 file2 ...]
+
+Example1: cat file | /Users/amaricci/.scripts/trans #1 #3-#2 'tan(#4)'
+
+Example2: /Users/amaricci/.scripts/trans #1, #2-#1, #3/#1 file1
+
+note: check your shell passes special characters to /Users/amaricci/.scripts/trans!
+      characters like \,$,# need a double-quote or slash!
+
