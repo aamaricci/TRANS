@@ -1,77 +1,239 @@
 #!/usr/bin/perl
+use File::Basename;
+use File::Temp;
+use Archive::Extract;
 use Math::Trig;			# includes trigonometric functions
-use Math::Complex;		# includes support for complex 
+use Math::Complex;		# includes support for complex
+
+
+#SETUP OF SOME GLOBAL VARIABLES USED IN THE REST OF THE SCRIPT
+$home = $ENV{HOME};
+$login=getpwuid($<);
+
+
+
+sub get_temp_filename {
+  my $template=$_[0];
+  my $fh = File::Temp->new(
+      TEMPLATE => "$template".'.XXXXX',
+      DIR => "/tmp",
+      );
+  $tmp_files[++$#tmp_files]=$fh->filename;
+  return $fh->filename;
+}
+
+# RETURN TRUE IF THE PASSED FILE CONTAINS MORE THAN ONE BLOCK SEPARATED
+# BY EITHER SPACE, TABS OR BLANK LINES
+sub count_mblock{		
+  my $file=$_[0];		
+  $count_blocks=0;
+  open(FILE, "< $file") or die "can't open $file: $!";
+  $lnew="\n";
+  foreach (<FILE>) {
+    $lold=$lnew;
+    $lnew=$_;
+    if ( $lold =~ /^\s*$/ && !($lnew =~ /^\s*$/)) {
+      $count_blocks++;
+    }
+  }
+  close(FILE);
+  undef $var;
+  if ($count_blocks>1) {$var=$count_blocks;}
+  return $var;
+}
+
+
+
+sub scatter_mblock{
+  my $file = $_[0];
+  my @ftmp_list;
+  my $count_blanks=0;
+  my $fcount=0;
+  open(FIN, "$file") or die "can't open $file: $!";
+  my $lnew="\n";
+  foreach (<FIN>) {
+    my $lold=$lnew;
+    $lnew=$_;
+    if ( $lold =~ /^\s*$/ && !($lnew =~ /^\s*$/)){	# if lold is empty open a new tmp file
+      $fcount++;
+      my $filename;
+      $filename=basename($file);
+      my $tmpfile = get_temp_filename($filename.'.set.'.$fcount);
+      $ftmp_list[++$#ftmp_list] = $tmpfile;
+      open(FOUT, "> $tmpfile");
+    }
+    print FOUT $lnew;
+    if ( $lnew =~ /^\s*$/) {
+      close(FOUT);
+    }				# if lnew is empty close tmp file
+  }
+  close(FIN);
+  return @ftmp_list;
+}
+
+
+
+
+$i=0;
+foreach $f (@ARGV) {  
+  my ($dir, $name, $ext) = fileparse($f, ".gz");
+  if ($ext eq ".gz") {
+    $i++;
+    my $tmp = get_temp_filename('trans_gzip.'.$login);
+    my $ae = Archive::Extract->new( archive => $f );
+    my $ok = $ae->extract( to => $tmp );
+    die $ae->error unless $ok;
+    $ARGV[$#ARGV + 1] = $tmp;
+    s/^$f$// for @ARGV;
+  }
+}
+
 
 push @files, "<&STDIN" unless -t STDIN; # stdin is treated like any other file
 foreach (@ARGV){
-    if (-e "$_"){	    # if file exists, it mush be function name
-	push @files, $_;
-    } else{
-	push @trans, $_;     # otherwise it is an expression for trans
+  if (-e "$_"){	    # if file exists, it mush be function name
+    undef @bfiles;
+    undef $iblock;
+    $iblock=count_mblock($_);
+    if ($iblock) {
+      @bfiles=scatter_mblock($_);
+      print STDERR "scatter $_ into blocks @bfiles\n";
+      push @files, @bfiles;
+    }else{
+      push @files, $_;
     }
+  } else{
+    if (substr($_,0,1) eq '-'){
+      push @options, $_;
+    }else{
+      push @trans, $_;     # otherwise it is an expression for trans
+    }
+  }
 }
 
 
+foreach (@files) {
+  open $_, $_;
+} # All files being transformed are opened
 
-foreach (@trans)
-{
-    if ($_ eq "-h")
-      {
-	print "**************** TRANS ******************\n";
-	print "**      transform data files            **\n";
-	print "** Copyright        Kristjan Haule      **\n";
-	print "** Version 2.1            22.9.2011     **\n";
-	print "** modified version by Adriano Amaricci **\n";
-	print "******************************************\n";
-	print "\n";
-	print "Usage:\n";
-	print "\n";
-	print "[... |] $0 f1(\#1, \#2, ...), [f2(\#1, \#2, ...)] [file1 file2 ...]\n";
-	print "\n";
-	print "Example1: cat file | $0 \#1 \#3-\#2 \'tan(\#4)\'\n";
-	print "\n";
-	print "Example2: $0 \#1, \#2-\#1, \#3/\#1 file1\n";
-	print "\n";
-	print "note: check your shell passes special characters to $0!\n";
-	print "      characters like \\,\$,\# need a double-quote or slash!\n";
-	print "\n";
-	exit;
-      }
 
-    
-    # in any user defined rule, it replaces symbol # by spl in the following way
-    #    #2:3  ->  $spl[1][2]
-    #    #3    ->  $spl[0][3]    
-    s/\#(\d+):(\d+)/\$spl\[${\($1-1)}\]\[${\($2-1)}\]/g;
-    s/\#(\d+)/\$spl\[0\]\[${\($1-1)}\]/g;
+
+$key='#';
+
+foreach (@options){
+  
+  if ($_ eq "-h" or $_ eq "--help" or $_ eq "info") {
+    print "**************** TRANS *******************\n";
+    print "**      transform data files             **\n";
+    print "** Copyright        Kristjan Haule       **\n";
+    print "** Version 2.1            22.9.2011      **\n";
+    print "** modified  by Adriano Amaricci 2013-15  **\n";
+    print "******************************************\n";
+    print "\n";
+    print " trans [options] [file/stdin]\n";
+    print "\n";
+    print "Options:   -k=C; --key=C [default=\#, allowed=\#,\%,\$,_,\@]\n";
+    print "\n";
+    print "Usage: \n";
+    print " [... |] trans f1(C1, C2, ...), [f2(C1, C2, ...)] [file1 file2 ...]\n";
+    print "\n";
+    print " cat file | trans C1 C3-C2 \'tan(C4)\'\n";
+    print "\n";
+    print " trans C1, C2-C1, C3/C1 file1\n";
+    print "\n";
+    print "note: check your shell passes special characters to trans!\n";
+    print "      characters like \\,\$,\# need a double-quote or preceding slash!!\n";
+    print "\n";
+    exit;
+  }
+  
+  #--------------------------------------------------------------------
+  if (substr($_,0,3) eq "-k=") {
+    $key=substr($_,3);
+    next;
+  }
+  if (substr($_,0,6) eq "--key=") {
+    $key=substr($_,6);
+    next;
   }
 
-foreach (@files){ open $_, $_;} # All files being transformed are opened
+  if (substr($_,0,3) eq "-wl" or substr($_,0,11) eq "--with-line" or substr($_,0,2) eq "-b") {
+    $with_line_indx=1;
+    next;
+  }
+}
 
+if (! grep { $key eq $_ } qw{# $ % ^ _ @ ~}){
+  die("key is not allowed. try: [#, $, %, ^, _, @, ~] \n" );
+}
+
+
+@trans_=@trans;
+
+foreach (@trans){
+  # in any user defined rule, it replaces symbol $KEY by spl in the following way:
+  # KEY2:3  ->  $spl[1][2]
+  # KEY3    ->  $spl[0][3]
+  s/$key(\d+):(\d+)/\$spl\[${\($1-1)}\]\[${\($2-1)}\]/g;
+  s/$key(\d+)/\$spl\[0\]\[${\($1-1)}\]/g;
+}
+
+
+  
 @{$spl[0]} = (' ');		# object spl is initialized
 
+$legend=1;
+$lline='';
+$line_indx=0;
 # Main loop
-LB: while (defined($spl[0][0])){ # goes ower all coumns
-    $i=0;
-    foreach $f (@files){	# goes ower all files
-	$_ = <$f>;		# reads one line from this file
-	# next if /^\s+#/;             # skip comment lines
-	if ($_ =~ /^\s*#/){ next; }
-	# if (/^\#/){ # if the file is commented, just print it and do nothing
-        #     $_ = <$f>;	# read next line in this case 
-        # }
-	@{$spl[$i++]} = split(' ',$_); # saves the contents of the file into two dimentional array spl
-    }		       # $spl[i][j] containes j-th column of i-th file
-    if (not defined($spl[0][0])){ # if first column does not exist, we reached end-of-file or 
-	last LB;    # end of continuous lines region of file -> finish
+LB: while (defined($spl[0][0])){   # goes over all lines:
+  $i=0;
+  $fline='';
+  $line_indx++;
+  foreach $f (@files){		# goes over all files
+    $_ = <$f>;			# reads one line from this file
+    if ($_ =~ /^\s*#/){ next; }
+    @{$spl[$i++]} = split(' ',$_); # saves the contents of the file into two dimentional array spl $spl[i][j] containes j-th column of i-th file
+    if (not defined($spl[0][0])){  # if first column does not exist, we reached end-of-file or 
+      last LB;	                   # end of continuous lines region of file -> finish
     }
-    $line = "";		   # the output line initialized
+    
+    $line[$i] = "";	   # the output line initialized
+    $jj=0;
     foreach $col (@trans){ # each column of each file is being processed
-	$val = eval $col; # the code for this column, as prepared above, is being evaluated - core step
-	$line .= $val . " "; # this transformed column is being glued together into a line
+      $val = eval $col; # the code for this column, as prepared above, is being evaluated - core step
+      $len_var[$jj++]=length $val;
+      $line[$i] .= $val . "\t"; # this transformed column is being glued together into a line
     }
-    print "$line\n";		# Finally, print out the resulting row
+
+    if ($legend) {
+      if (not $lline eq "") {$lline.="\t";}
+      if ($with_line_indx) {$lline.="I\t";}
+      $lline .= "F".$i.":";
+      $jj=0;
+      foreach $col (@trans_){
+	$string ="%-" . ($len_var[$jj++]+1) . 's';	
+	$lline .= sprintf("$string",$col)."\t";
+      }
+    }
+    
+    if ($with_line_indx) {
+      $fline.="$line_indx\t"."$line[$i]"."\t";
+    }else{
+      $fline.=$line[$i]."\t";
+    }
+
+  }
+  if ($legend) {
+    open(FILE,">trans.info");
+    print FILE "$lline\n";
+    close(FILE);
+    undef $legend;
+  }
+  print "$fline\n";		# Finally, print out the resulting row
 }
+
+
 
 
 sub real{ return Re(@_[0]);}
@@ -90,28 +252,3 @@ sub HBethe{
     return -2*(Im($ceta)-sign(Re($ceta))*sign(Im($ceta))*Im(sqrt($ceta**2-1.)))/pi;
 }
 
-sub seqNUM{
-    return (@_[0] .. @_[1]);
-}
-
-
-sub seqABN{
-    my $dx = (@_[1]-@_[0])/@_[2];
-    $i=0;
-    while ($i <  @_[2]){
-	$i++;
-	@array[$i] = @_[0] + $i*$dx;
-    }
-    return @array
-}
-
-sub seq{
-    my $dx = @_[1];
-    my $N = int(abs(@_[2]-@_[0])/$dx);
-    my $i=0;
-    while ($i<$N){
-	$i++;
-	@array[$i] = @_[0] + $i*$dx;
-    }
-    return @array
-}
