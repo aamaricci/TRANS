@@ -1,20 +1,24 @@
-##TRANS
-#transform data files
-#Copyright        Kristjan Haule
-#Version 2.1            22.9.2011 
-#modified  by Adriano Amaricci 2013-15
+## _TRANS_
+### transform data files
 
- trans [options] [file/stdin]
+*(c) Adriano Amaricci (-2015) [from an original work of Kristjan Haule (2011)]*
 
-#Options:   -k=C; --key=C [default=#, allowed=#,%,$,_,@]
+Version 0.3 [17.Aug.2015]
 
-#Usage: 
- [... |] trans f1(C1, C2, ...), [f2(C1, C2, ...)] [file1 file2 ...]
+### trans [options] [trans operations] [file/stdin]
 
- cat file | trans C1 C3-C2 'tan(C4)'
+#### Options:
+  - `-k=; --key=`   [column prefix, (default=#)  (allowed=#,%,$,_,@) ]
+  - `-c=; --cmt=`   [comment character (default=#)]
+  - `-l=; --line=`  [select specific line to plot]
+  - `-b; -wl; --with-line=`   [print line number as first column]
+  - `-lf=; --legend-file=`   [specify legend file (default=trans.info)]
 
- trans C1, C2-C1, C3/C1 file1
+#### Usage:
+[... | ] **trans** *[options]* [file_index:]function(column1) [file1 file2 ...]
 
-#note: check your shell passes special characters to trans!
-      characters like \,$,# need a double-quote or preceding slash!!
+` $ cat file | trans #1 #3-#2 'tan(#4)'`
 
+` $ trans co1, #2-#1, #3/#1 file1 file2`
+
+*note: check your shell passes special characters to trans! characters like \,$,# need a double-quote or preceding slash!!*
