@@ -56,9 +56,8 @@ sub scatter_mblock{
     $lnew=$_;
     if ( $lold =~ /^\s*$/ && !($lnew =~ /^\s*$/)){	# if lold is empty open a new tmp file
       $fcount++;
-      my $filename;
-      $filename=basename($file);
-      my $tmpfile = get_temp_filename($filename.'.set.'.$fcount);
+      my $filename = basename($file);
+      my $tmpfile  = get_temp_filename($filename.'.set.'.$fcount);
       $ftmp_list[++$#ftmp_list] = $tmpfile;
       open(FOUT, "> $tmpfile");
     }
@@ -68,9 +67,12 @@ sub scatter_mblock{
     }				# if lnew is empty close tmp file
   }
   close(FIN);
+  my $tmpfile=$ftmp_list[$#ftmp_list];
+  open(FOUT, ">> $tmpfile");
+  print FOUT "\n";
+  close(FOUT);
   return @ftmp_list;
 }
-
 
 
 
@@ -87,6 +89,7 @@ foreach $f (@ARGV) {
     s/^$f$// for @ARGV;
   }
 }
+
 
 
 push @files, "<&STDIN" unless -t STDIN; # stdin is treated like any other file
@@ -115,7 +118,6 @@ foreach (@ARGV){
 foreach (@files) {
   open $_, $_;
 } # All files being transformed are opened
-
 
 
 $key='#';
@@ -161,6 +163,17 @@ foreach (@options){
     $with_line_indx=1;
     next;
   }
+
+  if (substr($_,0,3) eq "-l=") {
+    $w_selected_line=1;
+    $selected_line=substr($_,3);
+    next;
+  }
+  if (substr($_,0,7) eq "--line=") {
+    $w_selected_line=1;
+    $selected_line=substr($_,7);
+    next;
+  }
 }
 
 if (! grep { $key eq $_ } qw{# $ % ^ _ @ ~}){
@@ -168,7 +181,26 @@ if (! grep { $key eq $_ } qw{# $ % ^ _ @ ~}){
 }
 
 
-@trans_=@trans;
+
+foreach ($j=0;$j<=$#files;$j++) {  
+  foreach (@trans) {
+    if (index($_,':') eq -1) {
+      my $opt=$_;
+      $opt =~ s/$key//g;
+      push @new_trans, "$key".($j+1).":"."$opt";
+    }
+  } 
+}
+foreach (@trans) {
+  if ( index($_,':') > -1) {
+    push @new_trans, $_
+  }
+}
+
+@trans  = @new_trans;
+@trans_ = @trans;
+
+print "\@trans = @trans\n";
 
 foreach (@trans){
   # in any user defined rule, it replaces symbol $KEY by spl in the following way:
@@ -178,62 +210,85 @@ foreach (@trans){
   s/$key(\d+)/\$spl\[0\]\[${\($1-1)}\]/g;
 }
 
+print "\@trans = @trans\n";
 
-  
 @{$spl[0]} = (' ');		# object spl is initialized
 
-$legend=1;
-$lline='';
-$line_indx=0;
+
 # Main loop
-LB: while (defined($spl[0][0])){   # goes over all lines:
-  $i=0;
-  $fline='';
+$line_indx=0;
+$lline='';
+$legend=1;
+LB: while (defined($spl[0][0])){ # goes over all lines:
+
   $line_indx++;
-  foreach $f (@files){		# goes over all files
-    $_ = <$f>;			# reads one line from this file
-    if ($_ =~ /^\s*#/){ next; }
-    @{$spl[$i++]} = split(' ',$_); # saves the contents of the file into two dimentional array spl $spl[i][j] containes j-th column of i-th file
-    if (not defined($spl[0][0])){  # if first column does not exist, we reached end-of-file or 
-      last LB;	                   # end of continuous lines region of file -> finish
+  $fline='';
+  
+  #goes over all files and store the actual lines into $spl[i][j], so that this object contains the j-th column of the i-th file.
+  $i=0;  
+  foreach $f (@files) {
+    $_ = <$f>;
+    if ($_ =~ /^\s*#/) {
+      next;
+    }				# skip line if it contains #
+    @{$spl[$i++]} = split(' ',$_);
+    if (not defined($spl[0][0])) { # if first column does not exist, we reached end-of-file: exit
+      last LB;
     }
-    
-    $line[$i] = "";	   # the output line initialized
-    $jj=0;
-    foreach $col (@trans){ # each column of each file is being processed
-      $val = eval $col; # the code for this column, as prepared above, is being evaluated - core step
-      $len_var[$jj++]=length $val;
-      $line[$i] .= $val . "\t"; # this transformed column is being glued together into a line
-    }
-
-    if ($legend) {
-      if (not $lline eq "") {$lline.="\t";}
-      if ($with_line_indx) {$lline.="I\t";}
-      $lline .= "F".$i.":";
-      $jj=0;
-      foreach $col (@trans_){
-	$string ="%-" . ($len_var[$jj++]+1) . 's';	
-	$lline .= sprintf("$string",$col)."\t";
-      }
-    }
-    
-    if ($with_line_indx) {
-      $fline.="$line_indx\t"."$line[$i]"."\t";
-    }else{
-      $fline.=$line[$i]."\t";
-    }
-
   }
+  
+
+  #now process each column using the fact that options in @trans have been transformed into string 
+  #matching the name of the 2D array spl[][] storing the numbers for this line:
+  #eval peforms the operations specified in @trans.
+  #len_var stores the lenght of the number to produce the trans.info legend
+  #line glue the value together
+  $line = "";
+  $jj=0;
+  foreach $col (@trans) {
+    $val = eval $col;
+    $len_var[$jj++]=length $val;
+    $line .= $val . "\t";
+  }
+    
+  if ($legend) {
+    if (not $lline eq "") {
+      $lline.="\t";
+    }
+    if ($with_line_indx) {
+      $lline.="I\t";
+    }
+    $lline .= "F".$i.":";
+    $jj=0;
+    foreach $col (@trans_) {
+      $string ="%-" . ($len_var[$jj++]+1) . 's';	
+      $lline .= sprintf("$string",$col)."\t";
+    }
+  }
+    
+  if ($with_line_indx) {
+    $fline.="$line_indx\t"."$line"."\t";
+  } else {
+    $fline.="$line"."\t";
+  }
+  
   if ($legend) {
     open(FILE,">trans.info");
     print FILE "$lline\n";
     close(FILE);
     undef $legend;
   }
-  print "$fline\n";		# Finally, print out the resulting row
+  
+  if (not $w_selected_line) {
+    print "$fline\n";
+  } else {
+    if ($line_indx eq $selected_line) {
+      print "$fline\n";
+      last LB;
+    }
+  }  
 }
-
-
+  
 
 
 sub real{ return Re(@_[0]);}
