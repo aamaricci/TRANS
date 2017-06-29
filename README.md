@@ -10,7 +10,11 @@ Version 0.3 [17.Aug.2015]
 #### Options:
   - `-k=; --key=`   [column prefix, (default=#)  (allowed=#,%,$,_,@) ]
   - `-c=; --cmt=`   [comment character (default=#)]
+<<<<<<< HEAD
   - `-l=; --line=`  [select specific line to plot]
+=======
+  - `-l=; --lines=`  [select specific line(s) to plot, single or first:last]
+>>>>>>> 2640dcb2760037e9c728c962756bf55aabbd1e7a
   - `-b; -wl; --with-line=`   [print line number as first column]
   - `-lf=; --legend-file=`   [specify legend file (default=trans.info)]
 

@@ -9,6 +9,8 @@ use Math::Complex;		# includes support for complex
 #SETUP OF SOME GLOBAL VARIABLES USED IN THE REST OF THE SCRIPT
 $home = $ENV{HOME};
 $login=getpwuid($<);
+$legend=0;  #by default no legend file
+>>>>>>> 2640dcb2760037e9c728c962756bf55aabbd1e7a
 $key='#';	# this is the default key value for user defined rules
 $cmt='#';	# this is the default comment character
 $legend_file='trans.info';	# legend file name
@@ -86,11 +88,11 @@ foreach (@options){
     print " trans [options] [trans operations] [file/stdin]\n";
     print "\n";
     print "Options:\n";
-    print "        -k=; --key=  - column prefix [default=\#, allowed=\#,\%,\$,_,\@]\n";
-    print "        -c=; --cmt=  - comment character [default=\#]\n";
-    print "        -l=; --line= - select specific line to plot\n";
+    print "        -k; --key=  - column prefix [default=\#, allowed=\#,\%,\$,_,\@]\n";
+    print "        -c; --cmt=  - comment character [default=\#]\n";
+    print "        -l; --line= - select specific line to plot\n";
     print "        -b; -wl; --with-line  - print line number as first column\n";
-    print "        -lf=; --legend-file=  - specify legend file [default=trans.info]\n";
+    print "        -lf; --legend-file=  - specify legend file [default=trans.info]\n";
     print "\n";
     
     print "Usage: \n";
@@ -108,8 +110,8 @@ foreach (@options){
   
 
   #UPDATE THE KEY CHARACTER TO SELECT COLUMNS
-  if (substr($_,0,3) eq "-k=") {
-    $key=substr($_,3);
+  if (substr($_,0,2) eq "-k") {
+    $key=substr($_,2);
     next;
   }
   if (substr($_,0,6) eq "--key=") {
@@ -124,21 +126,34 @@ foreach (@options){
   }
 
   #SELECT SPECIFIC LINE TO PLOT RATHER THAN THE WHOLE COLUMN.
-  if (substr($_,0,3) eq "-l=") {
+  if (substr($_,0,2) eq "-l") {
     $w_selected_line=1;
-    $selected_line=substr($_,3);
+	if (index($_, ":") != -1) {
+    	$line_start=substr($_, 2,index($_, ':')-2);
+		$line_end=substr($_,index($_, ':')+1);
+	} else {
+		$line_start=substr($_, 2);
+		$line_end=$line_start;
+		}
     next;
   }
-  if (substr($_,0,7) eq "--line=") {
+
+  if (substr($_,0,8) eq "--lines=") {
     $w_selected_line=1;
-    $selected_line=substr($_,7);
+	if (index($_, ":") != -1) {
+    	$line_start=substr($_, 8,index($_, ':')-8);
+		$line_end=substr($_, index($_, ':')+1);
+	} else {
+		$line_start=substr($_, 8);
+		$line_end=$line_start;
+		}
     next;
   }
 
 
   #SPECIFY COMMENT CHARACTER.
-  if (substr($_,0,3) eq "-c=") {
-    $cmt=substr($_,3);
+  if (substr($_,0,2) eq "-c") {
+    $cmt=substr($_,2);
     next;
   }
   if (substr($_,0,6) eq "--cmt=") {
@@ -148,10 +163,12 @@ foreach (@options){
 
 
   #SELECT SPECIFIC LINE TO PLOT RATHER THAN THE WHOLE COLUMN.
-  if (substr($_,0,4) eq "-lf=") {
-    $legend_file=substr($_,4);
+  if (substr($_,0,3) eq "-lf") {
+	$legend=1;
+    $legend_file=substr($_,3);
     next;
   }
+
   if (substr($_,0,14) eq "--legend-file=") {
     $legend_file=substr($_,14);
     next;
@@ -226,7 +243,6 @@ foreach (@trans){
 # PARSE LINE BY LINE (slow but very efficient): 
 $line_indx=0;
 $lline='';
-$legend=1;
 LB: while (defined($spl[0][0])){
 
   $line_indx++;
@@ -288,30 +304,29 @@ LB: while (defined($spl[0][0])){
       print "$fline\n";
     }
 
-  #else plot one line
+  #else plot only the selected lines
   } else {
 
-    # plot only the selected line
-    if ($line_indx eq $selected_line) {
-      my @farray= split(/\s+/,$fline);
-      my $i_=0;
-      foreach (@farray) {
-	chomp;
-      	my $string=$_;
-      	$string =~ s/^\s+//;
-	#if line index is required add a counter to first column.
-	if ($with_line_indx) {
-	  $i_++;
-	  print "$i_\t"."$string\n";
-	} else {
-	  print "$string\n";
-	}
-      }
-      last LB;
+    # 
+    if ($line_indx >= $line_start && $line_indx <=$line_end ) {
+     	#if line index is required add a counter to first column.
+    if ($with_line_indx) {
+      print "$line_indx\t"."$fline\n";
+    } else {
+      print "$fline\n";
     }
+	if ($line_indx > $line_end) {
+		last LB;
+	}
   }  
 }
-  
+}  
+
+if (not defined $save_tmp) {
+  unlink @tmp_files;
+}
+
+
 
 if (not defined $save_tmp) {
   unlink @tmp_files;
@@ -369,6 +384,7 @@ sub count_mblock{
   undef $var;
   if ($count_blocks>1) {$var=$count_blocks;}
   return $var;
+
 }
 
 
@@ -402,7 +418,6 @@ sub scatter_mblock{
   close(FOUT);
   return @ftmp_list;
 }
-
 
 #LEFT TRIM
 sub ltrim { my $s = shift; $s =~ s/^\s+//;       return $s };
