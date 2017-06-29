@@ -89,7 +89,7 @@ foreach (@options){
     print "Options:\n";
     print "        -k; --key=  - column prefix [default=\#, allowed=\#,\%,\$,_,\@]\n";
     print "        -c; --cmt=  - comment character [default=\#]\n";
-    print "        -l; --lines= - select specific line(s) to plot\n";
+    print "        -l; --line= - select specific line to plot\n";
     print "        -b; -wl; --with-line  - print line number as first column\n";
     print "        -lf; --legend-file=  - specify legend file [default=trans.info]\n";
     print "\n";
@@ -152,7 +152,7 @@ foreach (@options){
 
   #SPECIFY COMMENT CHARACTER.
   if (substr($_,0,2) eq "-c") {
-    $cmt=substr($_,3);
+    $cmt=substr($_,2);
     next;
   }
   if (substr($_,0,6) eq "--cmt=") {
@@ -164,7 +164,7 @@ foreach (@options){
   #SELECT SPECIFIC LINE TO PLOT RATHER THAN THE WHOLE COLUMN.
   if (substr($_,0,3) eq "-lf") {
 	$legend=1;
-    $legend_file=substr($_,4);
+    $legend_file=substr($_,3);
     next;
   }
   if (substr($_,0,14) eq "--legend-file=") {
