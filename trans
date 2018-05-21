@@ -9,12 +9,71 @@ use Math::Complex;		# includes support for complex
 #SETUP OF SOME GLOBAL VARIABLES USED IN THE REST OF THE SCRIPT
 $home = $ENV{HOME};
 $login=getpwuid($<);
-$legend=0;  #by default no legend file
->>>>>>> 2640dcb2760037e9c728c962756bf55aabbd1e7a
 $key='#';	# this is the default key value for user defined rules
 $cmt='#';	# this is the default comment character
 $legend_file='trans.info';	# legend file name
   
+sub get_temp_filename {
+  my $template=$_[0];
+  my $fh = File::Temp->new(
+      TEMPLATE => "$template".'.XXXXX',
+      DIR => "/tmp",
+      );
+  $tmp_files[++$#tmp_files]=$fh->filename;
+  return $fh->filename;
+}
+
+
+# RETURN TRUE IF THE PASSED FILE CONTAINS MORE THAN ONE BLOCK SEPARATED BY EITHER SPACE, TABS OR BLANK LINES
+sub count_mblock{		
+  my $file=$_[0];		
+  $count_blocks=0;
+  open(FILE, "< $file") or die "can't open $file: $!";
+  $lnew="\n";
+  foreach (<FILE>) {
+    $lold=$lnew;
+    $lnew=$_;
+    if ( $lold =~ /^\s*$/ && !($lnew =~ /^\s*$/)) {
+      $count_blocks++;
+    }
+  }
+  close(FILE);
+  undef $var;
+  if ($count_blocks>1) {$var=$count_blocks;}
+  return $var;
+}
+
+
+#SCATTER BLOCKS OF DATA FROM A GIVEN FILE INTO SEVERAL NEW FILES, ONE PER BLOCK.
+sub scatter_mblock{
+  my $file = $_[0];
+  my @ftmp_list;
+  my $count_blanks=0;
+  my $fcount=0;
+  open(FIN, "$file") or die "can't open $file: $!";
+  my $lnew="\n";
+  foreach (<FIN>) {
+    my $lold=$lnew;
+    $lnew=$_;
+    if ( $lold =~ /^\s*$/ && !($lnew =~ /^\s*$/)){	# if lold is empty open a new tmp file
+      $fcount++;
+      my $filename = basename($file);
+      my $tmpfile  = get_temp_filename($filename.'.set.'.$fcount);
+      $ftmp_list[++$#ftmp_list] = $tmpfile;
+      open(FOUT, "> $tmpfile");
+    }
+    print FOUT $lnew;
+    if ( $lnew =~ /^\s*$/) {
+      close(FOUT);
+    }				# if lnew is empty close tmp file
+  }
+  close(FIN);
+  my $tmpfile=$ftmp_list[$#ftmp_list];
+  open(FOUT, ">> $tmpfile");
+  print FOUT "\n";
+  close(FOUT);
+  return @ftmp_list;
+}
 
 
 
@@ -79,20 +138,21 @@ foreach (@options){
 
   # HELP:
   if ($_ eq "-h" or $_ eq "--help" or $_ eq "info") {
-    print "*********************** TRANS ***********************\n";
-    print "**               transforms data files             **\n";
-    print "**              Version 0.3     Aug,2015           **\n";
-    print "**          Kristjan Haule, Adriano Amaricci 2     **\n";
-    print "*****************************************************\n";
+    print "**************** TRANS *******************\n";
+    print "**      transform data files            **\n";
+    print "** Version 2.1         22.9.2011        **\n";
+    print "** Copyright       Kristjan Haule       **\n";
+    print "** modified by Adriano Amaricci 2013-15 **\n";
+    print "******************************************\n";
     print "\n";
     print " trans [options] [trans operations] [file/stdin]\n";
     print "\n";
     print "Options:\n";
-    print "        -k; --key=  - column prefix [default=\#, allowed=\#,\%,\$,_,\@]\n";
-    print "        -c; --cmt=  - comment character [default=\#]\n";
-    print "        -l; --line= - select specific line to plot\n";
+    print "        -k=; --key=  - column prefix [default=\#, allowed=\#,\%,\$,_,\@]\n";
+    print "        -c=; --cmt=  - comment character [default=\#]\n";
+    print "        -l=; --line= - select specific line to plot\n";
     print "        -b; -wl; --with-line  - print line number as first column\n";
-    print "        -lf; --legend-file=  - specify legend file [default=trans.info]\n";
+    print "        -lf=; --legend-file=  - specify legend file [default=trans.info]\n";
     print "\n";
     
     print "Usage: \n";
@@ -110,8 +170,8 @@ foreach (@options){
   
 
   #UPDATE THE KEY CHARACTER TO SELECT COLUMNS
-  if (substr($_,0,2) eq "-k") {
-    $key=substr($_,2);
+  if (substr($_,0,3) eq "-k=") {
+    $key=substr($_,3);
     next;
   }
   if (substr($_,0,6) eq "--key=") {
@@ -126,34 +186,21 @@ foreach (@options){
   }
 
   #SELECT SPECIFIC LINE TO PLOT RATHER THAN THE WHOLE COLUMN.
-  if (substr($_,0,2) eq "-l") {
+  if (substr($_,0,3) eq "-l=") {
     $w_selected_line=1;
-	if (index($_, ":") != -1) {
-    	$line_start=substr($_, 2,index($_, ':')-2);
-		$line_end=substr($_,index($_, ':')+1);
-	} else {
-		$line_start=substr($_, 2);
-		$line_end=$line_start;
-		}
+    $selected_line=substr($_,3);
     next;
   }
-
-  if (substr($_,0,8) eq "--lines=") {
+  if (substr($_,0,7) eq "--line=") {
     $w_selected_line=1;
-	if (index($_, ":") != -1) {
-    	$line_start=substr($_, 8,index($_, ':')-8);
-		$line_end=substr($_, index($_, ':')+1);
-	} else {
-		$line_start=substr($_, 8);
-		$line_end=$line_start;
-		}
+    $selected_line=substr($_,7);
     next;
   }
 
 
   #SPECIFY COMMENT CHARACTER.
-  if (substr($_,0,2) eq "-c") {
-    $cmt=substr($_,2);
+  if (substr($_,0,3) eq "-c=") {
+    $cmt=substr($_,3);
     next;
   }
   if (substr($_,0,6) eq "--cmt=") {
@@ -163,12 +210,10 @@ foreach (@options){
 
 
   #SELECT SPECIFIC LINE TO PLOT RATHER THAN THE WHOLE COLUMN.
-  if (substr($_,0,3) eq "-lf") {
-	$legend=1;
-    $legend_file=substr($_,3);
+  if (substr($_,0,4) eq "-lf=") {
+    $legend_file=substr($_,4);
     next;
   }
-
   if (substr($_,0,14) eq "--legend-file=") {
     $legend_file=substr($_,14);
     next;
@@ -243,6 +288,7 @@ foreach (@trans){
 # PARSE LINE BY LINE (slow but very efficient): 
 $line_indx=0;
 $lline='';
+$legend=1;
 LB: while (defined($spl[0][0])){
 
   $line_indx++;
@@ -252,8 +298,7 @@ LB: while (defined($spl[0][0])){
   $i=0;  
   foreach $f (@files) {
     $_ = <$f>;
-    # if ($_ =~ /^\s*#/) {next;}	# skip line if it contains comment character #
-    if ($_ =~ /^\s*$cmt/) {next;}	# skip line if it contains comment character $cmt
+    if ($_ =~ /^\s*#/) {next;}	# skip line if it contains comment character #
     @{$spl[$i++]} = split(' ',$_);
     if (not defined($spl[0][0])) { # if first column does not exist, we reached end-of-file: exit
       last LB;
@@ -304,120 +349,52 @@ LB: while (defined($spl[0][0])){
       print "$fline\n";
     }
 
-  #else plot only the selected lines
+  #else plot one line
   } else {
 
-    # 
-    if ($line_indx >= $line_start && $line_indx <=$line_end ) {
-     	#if line index is required add a counter to first column.
-    if ($with_line_indx) {
-      print "$line_indx\t"."$fline\n";
-    } else {
-      print "$fline\n";
-    }
-	if ($line_indx > $line_end) {
-		last LB;
+    # plot only the selected line
+    if ($line_indx eq $selected_line) {
+      my @farray= split(/\s+/,$fline);
+      my $i_=0;
+      foreach (@farray) {
+	chomp;
+      	my $string=$_;
+      	$string =~ s/^\s+//;
+	#if line index is required add a counter to first column.
+	if ($with_line_indx) {
+	  $i_++;
+	  print "$i_\t"."$string\n";
+	} else {
+	  print "$string\n";
 	}
+      }
+      last LB;
+    }
   }  
 }
-}  
+  
 
 if (not defined $save_tmp) {
   unlink @tmp_files;
 }
-
-
-
-if (not defined $save_tmp) {
-  unlink @tmp_files;
-}
-
-
-
-
-###################################################################################################
-######                                      SUBROUTINES                                      ######
-###################################################################################################
 
 sub real{ return Re(@_[0]);}
 sub imag{ return Im(@_[0]);}
 sub cmplx{ return @_[0]+i*@_[1];}
+sub fcmplx{ return "(".@_[0].",".@_[1].")";}
 sub fermi{ return 1.0/(exp(@_[0])+1);}
 sub nbose{ return 1.0/(exp(@_[0])-1);}
 sub pow2{ return @_[0]*@_[0];}
 sub sign{return @_[0]>=0 ? 1 : -1;}
 sub Hbethe{
-    my $zeta = @_[0];
-    return -0.5*(Im($z)-sign(Re($z))*sign(Im($z))*Im(sqrt($z**2-4.)))/pi;
+    my $ceta = @_[0];
+    return -0.5*(Im($ceta)-sign(Re($ceta))*sign(Im($ceta))*Im(sqrt($ceta**2-4.)))/pi;
 }
 sub HBethe{
-    my $z = @_[0];
-    return -2*(Im($z)-sign(Re($z))*sign(Im($z))*Im(sqrt($z**2-1.)))/pi;
+    my $ceta = @_[0];
+    return -2*(Im($ceta)-sign(Re($ceta))*sign(Im($ceta))*Im(sqrt($ceta**2-1.)))/pi;
 }
 
-
-sub get_temp_filename {
-  my $template=$_[0];
-  my $fh = File::Temp->new(
-      TEMPLATE => "$template".'.XXXXX',
-      DIR => "/tmp",
-      );
-  $tmp_files[++$#tmp_files]=$fh->filename;
-  return $fh->filename;
-}
-
-
-# RETURN TRUE IF THE PASSED FILE CONTAINS MORE THAN ONE BLOCK SEPARATED BY EITHER SPACE, TABS OR BLANK LINES
-sub count_mblock{		
-  my $file=$_[0];		
-  $count_blocks=0;
-  open(FILE, "< $file") or die "can't open $file: $!";
-  $lnew="\n";
-  foreach (<FILE>) {
-    $lold=$lnew;
-    $lnew=$_;
-    if ( $lold =~ /^\s*$/ && !($lnew =~ /^\s*$/)) {
-      $count_blocks++;
-    }
-  }
-  close(FILE);
-  undef $var;
-  if ($count_blocks>1) {$var=$count_blocks;}
-  return $var;
-
-}
-
-
-#SCATTER BLOCKS OF DATA FROM A GIVEN FILE INTO SEVERAL NEW FILES, ONE PER BLOCK.
-sub scatter_mblock{
-  my $file = $_[0];
-  my @ftmp_list;
-  my $count_blanks=0;
-  my $fcount=0;
-  open(FIN, "$file") or die "can't open $file: $!";
-  my $lnew="\n";
-  foreach (<FIN>) {
-    my $lold=$lnew;
-    $lnew=$_;
-    if ( $lold =~ /^\s*$/ && !($lnew =~ /^\s*$/)){	# if lold is empty open a new tmp file
-      $fcount++;
-      my $filename = basename($file);
-      my $tmpfile  = get_temp_filename($filename.'.set.'.$fcount);
-      $ftmp_list[++$#ftmp_list] = $tmpfile;
-      open(FOUT, "> $tmpfile");
-    }
-    print FOUT $lnew;
-    if ( $lnew =~ /^\s*$/) {
-      close(FOUT);
-    }				# if lnew is empty close tmp file
-  }
-  close(FIN);
-  my $tmpfile=$ftmp_list[$#ftmp_list];
-  open(FOUT, ">> $tmpfile");
-  print FOUT "\n";
-  close(FOUT);
-  return @ftmp_list;
-}
 
 #LEFT TRIM
 sub ltrim { my $s = shift; $s =~ s/^\s+//;       return $s };
